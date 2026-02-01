@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>마커 컴파일러</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #111; color: #eee; }
+    h1 { color: #cc0000; }
+    button { padding: 12px 24px; font-size: 16px; background: #cc0000; color: white; border: none; cursor: pointer; border-radius: 4px; }
+    button:disabled { background: #666; }
+    #status { margin-top: 20px; padding: 10px; background: #222; border-radius: 4px; min-height: 40px; }
+    img { max-width: 300px; margin: 10px 0; border: 1px solid #333; }
+    a { color: #cc0000; }
+  </style>
+</head>
+<body>
+  <h1>AR 마커 컴파일러</h1>
+  <p>ar-marker.png → MindAR .mind 파일 변환</p>
+  <img src="ar-marker.png" alt="marker preview">
+  <br><br>
+  <button id="compileBtn">컴파일 시작</button>
+  <div id="status">대기 중...</div>
+  <div id="download" style="display:none; margin-top:15px;"></div>
+
+  <script type="module">
+    import { Compiler } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+
+    const btn = document.getElementById('compileBtn');
+    const status = document.getElementById('status');
+    const downloadDiv = document.getElementById('download');
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      status.textContent = '이미지 로딩 중...';
+
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = 'ar-marker.png';
+        });
+
+        status.textContent = '컴파일 중... (1-2분 소요)';
+
+        const compiler = new Compiler();
+        await compiler.compileImageTargets([img], (progress) => {
+          status.textContent = `컴파일 중... ${Math.round(progress)}%`;
+        });
+
+        status.textContent = '데이터 추출 중...';
+        const exportedBuffer = await compiler.exportData();
+
+        const blob = new Blob([exportedBuffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+
+        // Auto download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'targets.mind';
+        a.click();
+
+        // Also show manual link
+        downloadDiv.innerHTML = `<a href="${url}" download="targets.mind">📥 targets.mind 다시 다운로드</a>`;
+        downloadDiv.style.display = 'block';
+
+        status.textContent = '✅ 완료! targets.mind 다운로드됨.';
+      } catch (e) {
+        status.textContent = '❌ 에러: ' + e.message;
+        console.error(e);
+      }
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>

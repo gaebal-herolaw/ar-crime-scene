@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>역사 현장 AR</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden; background: #000;
+      font-family: sans-serif;
+      position: fixed; inset: 0;
+    }
+
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: #111; color: #eee;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity 0.5s;
+    }
+    #loading-screen.hidden { opacity: 0; pointer-events: none; }
+    #loading-screen h1 { color: #cc0000; margin-bottom: 10px; font-size: 24px; }
+    #loading-screen p { color: #888; font-size: 14px; margin: 4px 0; }
+    .spinner {
+      width: 40px; height: 40px; margin: 20px;
+      border: 4px solid #333; border-top: 4px solid #cc0000;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #start-btn {
+      margin-top: 20px; padding: 14px 32px;
+      background: #cc0000; color: white; border: none;
+      border-radius: 8px; font-size: 18px; cursor: pointer;
+    }
+
+    #debug-panel {
+      position: fixed; top: 10px; left: 10px; z-index: 100;
+      background: rgba(0,0,0,0.7); color: #0f0; padding: 8px 12px;
+      font-family: monospace; font-size: 11px; border-radius: 4px;
+      pointer-events: none; max-width: 80%;
+    }
+
+    #controls {
+      position: fixed; bottom: 20px; right: 20px; z-index: 100;
+      display: none;
+    }
+    #controls button {
+      display: block; margin: 5px 0; padding: 8px 16px;
+      background: rgba(204,0,0,0.8); color: white;
+      border: none; border-radius: 4px; font-size: 14px;
+      cursor: pointer;
+    }
+
+    #coord-editor {
+      position: fixed; top: 10px; right: 10px; z-index: 100;
+      background: rgba(0,0,0,0.85); color: #eee; padding: 15px;
+      border-radius: 8px; font-size: 13px; display: none;
+      min-width: 200px;
+    }
+    #coord-editor label { display: block; margin: 6px 0 2px; color: #cc0000; font-weight: bold; }
+    #coord-editor input[type="range"] { width: 100%; }
+    #coord-editor .value { color: #0f0; font-family: monospace; float: right; }
+
+    #error-log {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 2000;
+      background: rgba(0,0,0,0.9); color: #f44; padding: 8px;
+      font-family: monospace; font-size: 10px; max-height: 30vh;
+      overflow-y: auto; display: none; word-break: break-all;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<div id="loading-screen">
+  <h1>역사 현장 AR</h1>
+  <p>과거 사건 현장을 AR로 재현합니다</p>
+  <p id="loading-status" style="color:#cc0000; margin-top:10px;">로딩 중...</p>
+  <div class="spinner" id="spinner"></div>
+  <button id="start-btn" style="display:none;">📷 AR 시작</button>
+</div>
+
+<div id="debug-panel">
+  <div id="debug-text">대기 중</div>
+</div>
+
+<div id="error-log"></div>
+
+<div id="coord-editor">
+  <strong>💥 이펙트 위치 조정</strong>
+  <label>X (좌우) <span class="value" id="val-x">0.5</span></label>
+  <input type="range" id="pos-x" min="-3" max="3" step="0.05" value="0.5">
+  <label>Y (상하) <span class="value" id="val-y">0.3</span></label>
+  <input type="range" id="pos-y" min="-3" max="3" step="0.05" value="0.3">
+  <label>Z (앞뒤) <span class="value" id="val-z">0</span></label>
+  <input type="range" id="pos-z" min="-3" max="3" step="0.05" value="0">
+  <label>크기 <span class="value" id="val-scale">1.0</span></label>
+  <input type="range" id="effect-scale" min="0.1" max="3" step="0.1" value="1.0">
+  <br>
+  <button id="copy-btn" style="margin-top:8px;padding:6px 12px;background:#cc0000;color:#fff;border:none;border-radius:4px;cursor:pointer;">📋 좌표 복사</button>
+  <button id="test-btn" style="margin-top:4px;padding:6px 12px;background:#333;color:#fff;border:none;border-radius:4px;cursor:pointer;">💥 테스트 발사</button>
+</div>
+
+<div id="controls">
+  <button id="editor-btn">⚙️ 좌표 편집</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { MindARThree } from 'mindar-image-three';
+
+// ========== ERROR LOGGER ==========
+const errorLog = document.getElementById('error-log');
+function log(msg, isError) {
+  errorLog.style.display = 'block';
+  const color = isError ? '#f44' : '#4f4';
+  errorLog.innerHTML += `<span style="color:${color}">[${new Date().toLocaleTimeString()}] ${msg}</span><br>`;
+  errorLog.scrollTop = errorLog.scrollHeight;
+  console.log(msg);
+}
+window.addEventListener('error', (e) => log('ERR: ' + e.message, true));
+window.addEventListener('unhandledrejection', (e) => log('PROMISE: ' + e.reason, true));
+
+// ========== CONFIG ==========
+const params = new URLSearchParams(window.location.search);
+const CONFIG = {
+  effectX: parseFloat(params.get('x')) || 0.5,
+  effectY: parseFloat(params.get('y')) || 0.3,
+  effectZ: parseFloat(params.get('z')) || 0,
+  effectScale: parseFloat(params.get('scale')) || 1.0,
+  intervalMs: 20000,
+};
+
+const statusEl = document.getElementById('loading-status');
+const debugEl = document.getElementById('debug-text');
+const startBtn = document.getElementById('start-btn');
+const spinnerEl = document.getElementById('spinner');
+
+// ========== PARTICLE SYSTEM ==========
+class BulletImpactEffect {
+  constructor(parentGroup) {
+    this.group = new THREE.Group();
+    this.particles = [];
+    this.dustParticles = [];
+    this.active = false;
+    this.elapsed = 0;
+
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0, side: THREE.DoubleSide });
+    this.flash = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), flashMat);
+    this.group.add(this.flash);
+
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0, side: THREE.DoubleSide });
+    this.hole = new THREE.Mesh(new THREE.CircleGeometry(0.02, 16), holeMat);
+    this.hole.position.z = 0.001;
+    this.group.add(this.hole);
+
+    this.cracks = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+      const len = 0.03 + Math.random() * 0.04;
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0.002),
+        new THREE.Vector3(Math.cos(angle) * len, Math.sin(angle) * len, 0.002)
+      ]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0 });
+      const crack = new THREE.Line(lineGeo, lineMat);
+      this.cracks.push(crack);
+      this.group.add(crack);
+    }
+
+    const colors = [0x8B4513, 0xA0522D, 0xD2691E, 0xDEB887, 0x6B3A1F];
+    for (let i = 0; i < 30; i++) {
+      const size = 0.005 + Math.random() * 0.015;
+      const geo = Math.random() > 0.5
+        ? new THREE.BoxGeometry(size, size * 0.4, size * 0.3)
+        : new THREE.TetrahedronGeometry(size);
+      const mat = new THREE.MeshBasicMaterial({
+        color: colors[Math.floor(Math.random() * colors.length)],
+        transparent: true, opacity: 0
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData = {
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: (Math.random() - 0.3) * 0.8,
+        vz: (Math.random() * 0.5 + 0.2),
+        rotSpeed: (Math.random() - 0.5) * 10,
+        gravity: -1.5,
+        delay: Math.random() * 0.05,
+      };
+      this.particles.push(mesh);
+      this.group.add(mesh);
+    }
+
+    for (let i = 0; i < 15; i++) {
+      const geo = new THREE.SphereGeometry(0.01 + Math.random() * 0.02, 6, 6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x998877, transparent: true, opacity: 0 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData = {
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        vz: Math.random() * 0.2,
+        expandRate: 1 + Math.random() * 2,
+      };
+      this.dustParticles.push(mesh);
+      this.group.add(mesh);
+    }
+
+    parentGroup.add(this.group);
+    log('Effect created with ' + this.particles.length + ' particles');
+  }
+
+  trigger() {
+    this.active = true;
+    this.elapsed = 0;
+    this.particles.forEach(p => { p.position.set(0, 0, 0); p.material.opacity = 1; });
+    this.dustParticles.forEach(p => { p.position.set(0, 0, 0); p.material.opacity = 0.6; p.scale.set(1, 1, 1); });
+    this.flash.material.opacity = 1;
+    this.flash.scale.set(1, 1, 1);
+    this.hole.material.opacity = 0;
+    this.cracks.forEach(c => c.material.opacity = 0);
+    log('💥 Effect triggered');
+  }
+
+  update(dt) {
+    if (!this.active) return;
+    this.elapsed += dt;
+
+    if (this.elapsed < 0.1) {
+      this.flash.material.opacity = 1 - (this.elapsed / 0.1);
+      this.flash.scale.setScalar(1 + this.elapsed * 10);
+    } else {
+      this.flash.material.opacity = 0;
+    }
+
+    if (this.elapsed > 0.05) {
+      this.hole.material.opacity = Math.min(1, (this.elapsed - 0.05) * 10);
+      this.cracks.forEach(c => c.material.opacity = Math.min(0.8, (this.elapsed - 0.05) * 8));
+    }
+
+    this.particles.forEach(p => {
+      const t = this.elapsed - p.userData.delay;
+      if (t < 0) return;
+      if (t > 1.5) { p.material.opacity = 0; return; }
+      p.position.x += p.userData.vx * dt;
+      p.position.y += p.userData.vy * dt;
+      p.position.z += p.userData.vz * dt;
+      p.userData.vy += p.userData.gravity * dt;
+      p.rotation.x += p.userData.rotSpeed * dt;
+      p.rotation.z += p.userData.rotSpeed * 0.7 * dt;
+      if (t > 1.0) p.material.opacity = 1 - ((t - 1.0) / 0.5);
+    });
+
+    this.dustParticles.forEach(p => {
+      if (this.elapsed > 2) { p.material.opacity = 0; return; }
+      p.position.x += p.userData.vx * dt;
+      p.position.y += p.userData.vy * dt;
+      p.position.z += p.userData.vz * dt;
+      const s = 1 + this.elapsed * p.userData.expandRate;
+      p.scale.set(s, s, s);
+      if (this.elapsed > 0.5) p.material.opacity = Math.max(0, 0.6 - ((this.elapsed - 0.5) / 1.5) * 0.6);
+    });
+
+    if (this.elapsed > 3) {
+      const fade = Math.max(0, 1 - ((this.elapsed - 3) / 1));
+      this.hole.material.opacity = fade;
+      this.cracks.forEach(c => c.material.opacity = fade * 0.8);
+    }
+    if (this.elapsed > 4) this.active = false;
+  }
+
+  setPosition(x, y, z) { this.group.position.set(x, y, z); }
+  setScale(s) { this.group.scale.set(s, s, s); }
+}
+
+// ========== MAIN ==========
+let effect = null;
+let isTracking = false;
+let intervalId = null;
+
+async function startAR() {
+  try {
+    startBtn.style.display = 'none';
+    spinnerEl.style.display = 'block';
+    statusEl.textContent = '카메라 권한 요청 중...';
+    log('Starting AR...');
+
+    const mindarThree = new MindARThree({
+      container: document.body,
+      imageTargetSrc: 'targets.mind',
+      maxTrack: 1,
+      uiLoading: 'no',
+      uiScanning: 'no',
+      uiError: 'no',
+    });
+
+    log('MindAR instance created');
+
+    const { renderer, scene, camera } = mindarThree;
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+    const anchor = mindarThree.addAnchor(0);
+    log('Anchor added for target 0');
+
+    // Red test cube
+    const testCube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 })
+    );
+    anchor.group.add(testCube);
+
+    // Effect
+    effect = new BulletImpactEffect(anchor.group);
+    effect.setPosition(CONFIG.effectX, CONFIG.effectY, CONFIG.effectZ);
+    effect.setScale(CONFIG.effectScale);
+
+    anchor.onTargetFound = () => {
+      isTracking = true;
+      debugEl.textContent = '✅ 마커 인식됨!';
+      document.getElementById('controls').style.display = 'block';
+      log('🎯 TARGET FOUND!');
+      setTimeout(() => effect.trigger(), 500);
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => {
+        if (isTracking) effect.trigger();
+      }, CONFIG.intervalMs);
+    };
+
+    anchor.onTargetLost = () => {
+      isTracking = false;
+      debugEl.textContent = '⚠️ 마커 놓침 — 다시 비춰주세요';
+      log('Target lost');
+    };
+
+    setupSliders();
+
+    statusEl.textContent = '카메라 시작 중...';
+    log('Calling mindarThree.start()...');
+
+    await mindarThree.start();
+
+    log('✅ Camera started successfully');
+    log('Camera type: ' + camera.type + ', isPerspective: ' + (camera instanceof THREE.PerspectiveCamera));
+    log('Projection matrix valid: ' + (camera.projectionMatrix !== undefined));
+
+    document.getElementById('loading-screen').classList.add('hidden');
+    debugEl.textContent = '📷 카메라 활성 — 마커를 비춰주세요';
+
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Render loop — only particle updates, let MindAR handle rendering
+    const clock = new THREE.Clock();
+    const renderLoop = () => {
+      requestAnimationFrame(renderLoop);
+      const dt = clock.getDelta();
+      if (effect) effect.update(dt);
+    };
+    renderLoop();
+
+    // MindAR's own render via setAnimationLoop
+    renderer.setAnimationLoop(() => {
+      renderer.render(scene, camera);
+    });
+
+  } catch (e) {
+    statusEl.textContent = '❌ 에러: ' + e.message;
+    log('FATAL: ' + e.message + '\n' + (e.stack || ''), true);
+    startBtn.style.display = 'block';
+    spinnerEl.style.display = 'none';
+  }
+}
+
+function setupSliders() {
+  const sliderX = document.getElementById('pos-x');
+  const sliderY = document.getElementById('pos-y');
+  const sliderZ = document.getElementById('pos-z');
+  const sliderScale = document.getElementById('effect-scale');
+  sliderX.value = CONFIG.effectX;
+  sliderY.value = CONFIG.effectY;
+  sliderZ.value = CONFIG.effectZ;
+  sliderScale.value = CONFIG.effectScale;
+  document.getElementById('val-x').textContent = CONFIG.effectX;
+  document.getElementById('val-y').textContent = CONFIG.effectY;
+  document.getElementById('val-z').textContent = CONFIG.effectZ;
+  document.getElementById('val-scale').textContent = CONFIG.effectScale;
+
+  function updatePos() {
+    if (!effect) return;
+    effect.setPosition(parseFloat(sliderX.value), parseFloat(sliderY.value), parseFloat(sliderZ.value));
+    effect.setScale(parseFloat(sliderScale.value));
+    document.getElementById('val-x').textContent = parseFloat(sliderX.value).toFixed(2);
+    document.getElementById('val-y').textContent = parseFloat(sliderY.value).toFixed(2);
+    document.getElementById('val-z').textContent = parseFloat(sliderZ.value).toFixed(2);
+    document.getElementById('val-scale').textContent = parseFloat(sliderScale.value).toFixed(1);
+  }
+  sliderX.addEventListener('input', updatePos);
+  sliderY.addEventListener('input', updatePos);
+  sliderZ.addEventListener('input', updatePos);
+  sliderScale.addEventListener('input', updatePos);
+}
+
+// UI handlers
+let editorVisible = false;
+document.getElementById('editor-btn').addEventListener('click', () => {
+  editorVisible = !editorVisible;
+  document.getElementById('coord-editor').style.display = editorVisible ? 'block' : 'none';
+});
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const x = document.getElementById('pos-x').value;
+  const y = document.getElementById('pos-y').value;
+  const z = document.getElementById('pos-z').value;
+  const s = document.getElementById('effect-scale').value;
+  navigator.clipboard.writeText(`x=${x}&y=${y}&z=${z}&scale=${s}`).then(() => alert('복사됨'));
+});
+document.getElementById('test-btn').addEventListener('click', () => { if (effect) effect.trigger(); });
+
+// ========== INIT ==========
+log('Page loaded. Preparing...');
+statusEl.textContent = '아래 버튼을 눌러 시작하세요';
+spinnerEl.style.display = 'none';
+startBtn.style.display = 'block';
+startBtn.addEventListener('click', startAR);
+</script>
+</body>
+</html>
