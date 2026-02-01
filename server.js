@@ -16,6 +16,21 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
+  // POST /save-mind — save compiled .mind file directly
+  if (req.method === 'POST' && req.url === '/save-mind') {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      const buf = Buffer.concat(chunks);
+      const dest = path.join(PUBLIC, 'targets.mind');
+      fs.writeFileSync(dest, buf);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, size: buf.length }));
+      console.log('Saved targets.mind (' + buf.length + ' bytes)');
+    });
+    return;
+  }
+
   let filePath = path.join(PUBLIC, req.url === '/' ? 'index.html' : req.url);
   const ext = path.extname(filePath);
 

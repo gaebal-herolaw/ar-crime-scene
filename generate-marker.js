@@ -6,239 +6,108 @@ const W = 1024, H = 1024;
 const canvas = createCanvas(W, H);
 const ctx = canvas.getContext('2d');
 
-// ===== WHITE BACKGROUND for high contrast =====
+// ===== Pure white background =====
 ctx.fillStyle = '#ffffff';
 ctx.fillRect(0, 0, W, H);
 
-// Thick black border
-ctx.strokeStyle = '#000000';
-ctx.lineWidth = 12;
-ctx.strokeRect(15, 15, W - 30, H - 30);
-
-// Inner red border
-ctx.strokeStyle = '#cc0000';
-ctx.lineWidth = 4;
-ctx.strokeRect(40, 40, W - 80, H - 80);
-
-// ===== TITLE AREA =====
-// Dark header bar
-ctx.fillStyle = '#1a1a1a';
-ctx.fillRect(40, 40, W - 80, 120);
-
-ctx.fillStyle = '#ffffff';
-ctx.font = 'bold 52px sans-serif';
-ctx.textAlign = 'center';
-ctx.fillText('HISTORICAL SITE', W / 2, 115);
-
-ctx.font = '20px sans-serif';
-ctx.fillStyle = '#cc0000';
-ctx.fillText('CRIME SCENE RECONSTRUCTION', W / 2, 150);
-
-// ===== LARGE ASYMMETRIC CROSSHAIR =====
-const cx = W * 0.38, cy = H * 0.45;
-
-// Crosshair lines - thick black
-ctx.strokeStyle = '#000000';
-ctx.lineWidth = 3;
-ctx.beginPath();
-ctx.moveTo(cx, 180);
-ctx.lineTo(cx, H - 120);
-ctx.stroke();
-ctx.beginPath();
-ctx.moveTo(60, cy);
-ctx.lineTo(W - 60, cy);
-ctx.stroke();
-
-// Concentric circles - alternating black and red
-for (let r = 30; r <= 130; r += 20) {
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = r % 40 === 10 ? '#cc0000' : '#000000';
-  ctx.lineWidth = r % 40 === 10 ? 4 : 2;
-  ctx.stroke();
-}
-
-// Filled center dot
-ctx.beginPath();
-ctx.arc(cx, cy, 8, 0, Math.PI * 2);
-ctx.fillStyle = '#cc0000';
-ctx.fill();
-
-// Small crosshair at center - white on red
-ctx.strokeStyle = '#ffffff';
-ctx.lineWidth = 2;
-ctx.beginPath(); ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 12, cy); ctx.stroke();
-ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx, cy + 12); ctx.stroke();
-
-// ===== BULLET HOLE (right side) =====
-const bx = W * 0.72, by = H * 0.55;
-
-// Impact crater - dark circle with cracks
-ctx.beginPath();
-ctx.arc(bx, by, 25, 0, Math.PI * 2);
+// ===== Thick black outer border =====
 ctx.fillStyle = '#000000';
+// Top bar
+ctx.fillRect(0, 0, W, 40);
+// Bottom bar
+ctx.fillRect(0, H - 40, W, 40);
+// Left bar
+ctx.fillRect(0, 0, 40, H);
+// Right bar
+ctx.fillRect(W - 40, 0, 40, H);
+
+// ===== Giant "518" — the dominant feature =====
+ctx.fillStyle = '#000000';
+ctx.font = 'bold 320px "Arial Black", "Impact", sans-serif';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillText('518', W / 2, H / 2 - 30);
+
+// ===== Horizontal bars above and below the number =====
+ctx.fillRect(80, 200, W - 160, 16);
+ctx.fillRect(80, H - 240, W - 160, 16);
+
+// ===== Asymmetric corner blocks (each unique for orientation) =====
+// Top-left: large solid square
+ctx.fillRect(60, 60, 80, 80);
+
+// Top-right: circle
+ctx.beginPath();
+ctx.arc(W - 100, 100, 40, 0, Math.PI * 2);
 ctx.fill();
 
-// Outer ring
+// Bottom-left: triangle pointing up
 ctx.beginPath();
-ctx.arc(bx, by, 35, 0, Math.PI * 2);
-ctx.strokeStyle = '#333333';
-ctx.lineWidth = 3;
-ctx.stroke();
-
-// Radial crack lines - thick and visible
-const angles = [0.2, 0.7, 1.3, 1.9, 2.4, 3.0, 3.6, 4.2, 4.7, 5.4];
-angles.forEach(a => {
-  const len = 40 + Math.sin(a * 3) * 25;
-  ctx.beginPath();
-  ctx.moveTo(bx + Math.cos(a) * 25, by + Math.sin(a) * 25);
-  ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
-  ctx.strokeStyle = '#222222';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-});
-
-// Spiderweb cracks (arcs connecting radials)
-ctx.strokeStyle = '#555555';
-ctx.lineWidth = 1.5;
-for (let r = 45; r <= 65; r += 20) {
-  ctx.beginPath();
-  ctx.arc(bx, by, r, 0.2, 2.4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(bx, by, r, 3.0, 5.4);
-  ctx.stroke();
-}
-
-// ===== EVIDENCE MARKERS (high contrast shapes) =====
-
-// Triangle evidence marker (bottom left)
-ctx.fillStyle = '#cc0000';
-ctx.beginPath();
-ctx.moveTo(120, H - 130);
-ctx.lineTo(180, H - 130);
-ctx.lineTo(150, H - 190);
+ctx.moveTo(100, H - 60);
+ctx.lineTo(60, H - 140);
+ctx.lineTo(140, H - 140);
 ctx.closePath();
 ctx.fill();
-// Number on it
-ctx.fillStyle = '#ffffff';
-ctx.font = 'bold 24px sans-serif';
-ctx.textAlign = 'center';
-ctx.fillText('1', 150, H - 143);
 
-// Square evidence marker (bottom right)
-ctx.fillStyle = '#cc0000';
-ctx.fillRect(W - 160, H - 170, 55, 55);
-ctx.fillStyle = '#ffffff';
-ctx.font = 'bold 28px sans-serif';
-ctx.fillText('2', W - 133, H - 133);
-
-// ===== ASYMMETRIC PATTERNS (feature-rich) =====
-
-// Top-right: starburst pattern
-const sx = W * 0.78, sy = H * 0.25;
-for (let i = 0; i < 12; i++) {
-  const a = (i / 12) * Math.PI * 2;
-  const len = i % 2 === 0 ? 50 : 30;
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len);
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-}
+// Bottom-right: diamond
 ctx.beginPath();
-ctx.arc(sx, sy, 12, 0, Math.PI * 2);
-ctx.fillStyle = '#000000';
+ctx.moveTo(W - 100, H - 60);
+ctx.lineTo(W - 60, H - 100);
+ctx.lineTo(W - 100, H - 140);
+ctx.lineTo(W - 140, H - 100);
+ctx.closePath();
 ctx.fill();
 
-// ===== SCATTERED HIGH-CONTRAST DOTS (asymmetric) =====
-const dotPositions = [
-  // Cluster A (upper right)
-  [680, 320, 7], [720, 290, 5], [750, 340, 8], [700, 370, 4], [760, 300, 6],
-  // Cluster B (lower center)
-  [450, 680, 6], [490, 710, 8], [430, 740, 5], [510, 690, 7], [470, 750, 4],
-  // Cluster C (scattered)
-  [350, 350, 5], [550, 300, 4], [600, 600, 6], [300, 580, 5],
-  [850, 500, 7], [870, 550, 5], [830, 530, 4],
-  [200, 450, 5], [220, 500, 6],
+// ===== Scattered asymmetric dots for feature richness =====
+const dots = [
+  // Left column
+  [70, 280, 8], [90, 350, 5], [65, 420, 10], [85, 490, 6],
+  // Right column
+  [W-70, 280, 10], [W-90, 370, 6], [W-65, 450, 8], [W-85, 510, 5],
+  // Top row
+  [250, 80, 7], [380, 90, 5], [520, 75, 9], [650, 85, 6], [780, 80, 8],
+  // Bottom row
+  [200, H-80, 6], [350, H-90, 8], [500, H-75, 5], [680, H-85, 9], [820, H-80, 7],
+  // Around numbers - asymmetric scatter
+  [180, 320, 7], [250, 420, 5], [150, 530, 8],
+  [830, 350, 6], [870, 450, 9], [810, 540, 5],
 ];
-dotPositions.forEach(([x, y, r]) => {
+dots.forEach(([x, y, r]) => {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = '#000000';
   ctx.fill();
 });
 
-// ===== DASHED LINES (diagonal, for more features) =====
-ctx.setLineDash([10, 8]);
-ctx.strokeStyle = '#888888';
-ctx.lineWidth = 2;
-// Diagonal 1
-ctx.beginPath();
-ctx.moveTo(500, 200);
-ctx.lineTo(900, 400);
-ctx.stroke();
-// Diagonal 2
-ctx.beginPath();
-ctx.moveTo(100, 700);
-ctx.lineTo(400, 500);
-ctx.stroke();
-ctx.setLineDash([]);
-
-// ===== CORNER MARKERS (each unique) =====
-// Top-left: L-bracket (black)
-ctx.fillStyle = '#000000';
-ctx.fillRect(55, 55, 60, 8);
-ctx.fillRect(55, 55, 8, 60);
-
-// Top-right: three dots descending
-[{ x: W - 75, y: 75, r: 12 }, { x: W - 100, y: 100, r: 8 }, { x: W - 68, y: 118, r: 5 }].forEach(d => {
-  ctx.beginPath();
-  ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-  ctx.fillStyle = '#000000';
-  ctx.fill();
+// ===== Small geometric shapes (adds unique features) =====
+// Small crosses
+const crosses = [[200, 170, 12], [750, 170, 10], [300, H-200, 11], [700, H-190, 9]];
+crosses.forEach(([cx, cy, s]) => {
+  ctx.fillRect(cx - s, cy - 2, s * 2, 4);
+  ctx.fillRect(cx - 2, cy - s, 4, s * 2);
 });
 
-// Bottom-left: triangle already done above
+// Small L-shapes
+ctx.fillRect(160, 240, 30, 5);
+ctx.fillRect(160, 240, 5, 25);
 
-// Bottom-right: filled square already done above
+ctx.fillRect(W - 190, 240, 30, 5);
+ctx.fillRect(W - 165, 240, 5, 25);
 
-// ===== EVIDENCE TAG =====
-ctx.fillStyle = '#000000';
-ctx.font = 'bold 72px monospace';
-ctx.textAlign = 'right';
-ctx.fillText('E-01', W - 70, H - 195);
+// ===== Thin vertical lines (asymmetric spacing) =====
+ctx.fillRect(200, 230, 3, 560);
+ctx.fillRect(W - 203, 230, 3, 560);
 
-// ===== SCALE BAR =====
-ctx.strokeStyle = '#000000';
-ctx.lineWidth = 3;
-ctx.beginPath();
-ctx.moveTo(100, H - 80);
-ctx.lineTo(500, H - 80);
-ctx.stroke();
-
-// Alternating filled segments for visibility
-for (let i = 0; i < 8; i++) {
-  const x = 100 + i * 50;
-  if (i % 2 === 0) {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(x, H - 90, 50, 20);
-  }
-}
-
-ctx.fillStyle = '#000000';
-ctx.font = '14px monospace';
+// ===== Date text under number =====
+ctx.font = 'bold 36px "Arial", sans-serif';
 ctx.textAlign = 'center';
-ctx.fillText('0       50      100     150     200     250    300    350 cm', 300, H - 55);
+ctx.fillText('1980. 5. 18', W / 2, H / 2 + 170);
 
-// ===== BOTTOM LABEL =====
-ctx.fillStyle = '#666666';
-ctx.font = '16px monospace';
-ctx.textAlign = 'center';
-ctx.fillText('AR MARKER — DO NOT REMOVE', W / 2, H - 30);
+// ===== Small label at bottom =====
+ctx.font = '18px monospace';
+ctx.fillStyle = '#000000';
+ctx.fillText('AR MARKER', W / 2, H - 55);
 
-// ===== SAVE =====
+// ===== Save =====
 const buffer = canvas.toBuffer('image/png');
 const outPath = path.join(__dirname, 'public', 'ar-marker.png');
 fs.writeFileSync(outPath, buffer);

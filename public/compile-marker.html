@@ -55,17 +55,25 @@
         const blob = new Blob([exportedBuffer], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
 
-        // Auto download
+        // Save to server directly
+        status.textContent = '서버에 저장 중...';
+        const saveRes = await fetch('/save-mind', {
+          method: 'POST',
+          body: exportedBuffer,
+        });
+        const saveJson = await saveRes.json();
+
+        // Also offer manual download
         const a = document.createElement('a');
         a.href = url;
         a.download = 'targets.mind';
-        a.click();
 
-        // Also show manual link
         downloadDiv.innerHTML = `<a href="${url}" download="targets.mind">📥 targets.mind 다시 다운로드</a>`;
         downloadDiv.style.display = 'block';
 
-        status.textContent = '✅ 완료! targets.mind 다운로드됨.';
+        status.textContent = saveJson.ok
+          ? '✅ 완료! targets.mind 서버에 저장됨 (' + saveJson.size + ' bytes)'
+          : '⚠️ 서버 저장 실패 — 수동 다운로드 필요';
       } catch (e) {
         status.textContent = '❌ 에러: ' + e.message;
         console.error(e);
